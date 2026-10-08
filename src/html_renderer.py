@@ -10,8 +10,14 @@ def generate_html_string(data: dict) -> str:
     errors = data.get("errors", [])
 
     if error_count > 0:
+        MAX_DISPLAY = 15
+        display_errors = errors[:MAX_DISPLAY]
         # 修復 1：使用 html.escape 防止 Log 中的 < 或 > 符號破壞 HTML 排版
-        errors_html = "".join(f"<div class='error-item'>{html.escape(err)}</div>" for err in errors)
+        errors_html = "".join(f"<div class='error-item'>{html.escape(err)}</div>" for err in display_errors)
+        
+        if error_count > MAX_DISPLAY:
+            hidden_count = error_count - MAX_DISPLAY
+            errors_html += f"<div class='error-item' style='text-align: center; color: #57606a; background-color: #f6f8fa; border: 1px dashed #d0d7de;'>... 還有 {hidden_count} 筆錯誤被折疊，請參閱原始檔案 ...</div>"
     else:
         errors_html = "<div class='success-box'>✔ System operating normally, no errors detected.</div>"
 
