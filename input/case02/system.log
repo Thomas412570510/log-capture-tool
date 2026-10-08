@@ -1,0 +1,4 @@
+[2026-10-08 11:00:00] INFO 系統正常運作中...
+[2026-10-08 11:01:22] ERROR Database connection timeout after 30000ms.
+[2026-10-08 11:01:25] FATAL Failed to execute query: SELECT * FROM users
+[2026-10-08 11:02:10] ERROR Pool empty, unable to acquire new connection.

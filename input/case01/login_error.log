@@ -1,0 +1,5 @@
+1 2026-10-05 09:22:01 INFO Login Request Received
+2 2026-10-05 09:22:01 INFO User Validation Success
+3 2026-10-05 09:22:03 ERROR Session Service Timeout
+4 2026-10-05 09:22:03 ERROR Failed To Create Session
+5 2026-10-05 09:22:03 HTTP 500 Internal Server Error
