@@ -4,22 +4,13 @@ import html
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
-def generate_html_string(data: dict) -> str:
-    log_source = data.get("log_source", "Unknown")
-    error_count = data.get("error_count", 0)
-    errors = data.get("errors", [])
-
+def generate_html_string(log_source: str, error_count: int, chunk_errors: list, page_num: int, total_pages: int) -> str:
     if error_count > 0:
-        MAX_DISPLAY = 15
-        display_errors = errors[:MAX_DISPLAY]
-        # 修復 1：使用 html.escape 防止 Log 中的 < 或 > 符號破壞 HTML 排版
-        errors_html = "".join(f"<div class='error-item'>{html.escape(err)}</div>" for err in display_errors)
-        
-        if error_count > MAX_DISPLAY:
-            hidden_count = error_count - MAX_DISPLAY
-            errors_html += f"<div class='error-item' style='text-align: center; color: #57606a; background-color: #f6f8fa; border: 1px dashed #d0d7de;'>... 還有 {hidden_count} 筆錯誤被折疊，請參閱原始檔案 ...</div>"
+        errors_html = "".join(f"<div class='error-item'>{html.escape(err)}</div>" for err in chunk_errors)
+        page_indicator = f" (Page {page_num}/{total_pages})" if total_pages > 1 else ""
     else:
         errors_html = "<div class='success-box'>✔ System operating normally, no errors detected.</div>"
+        page_indicator = ""
 
     html_content = f"""
     <!DOCTYPE html>
@@ -46,7 +37,7 @@ def generate_html_string(data: dict) -> str:
                     <svg width="22" height="22" viewBox="0 0 16 16" fill="currentColor">
                         <path fill-rule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm6.5-.25A.75.75 0 017.25 7h1.5a.75.75 0 01.75.75v2.5a.75.75 0 01-.75.75h-1.5a.75.75 0 01-.75-.75v-2.5zm1.5-3a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"></path>
                     </svg>
-                    Error Log
+                    Error Log{page_indicator}
                 </div>
                 <div class="badge">Source: {log_source}</div>
             </div>
@@ -62,7 +53,6 @@ def generate_html_string(data: dict) -> str:
     return html_content
 
 def run_html_rendering(base_output_dir: str = "output"):
-    # 修復 4：採用絕對路徑與相對於本腳本的目錄位置
     base_dir = Path(__file__).resolve().parent.parent
     json_path = base_dir / "processed" / "extracted_data.json"
     
@@ -81,31 +71,47 @@ def run_html_rendering(base_output_dir: str = "output"):
     print("啟動畫面渲染模組 (HTML Renderer)")
     print("==========================================")
 
+    MAX_DISPLAY = 15
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
-
-        output_dir = base_dir / base_output_dir
-        output_dir.mkdir(parents=True, exist_ok=True)
 
         for data in all_cases_data:
             case_name = data.get("case_name")
             if not case_name:
                 continue
+                
+            log_source = data.get("log_source", "Unknown")
+            error_count = data.get("error_count", 0)
+            errors = data.get("errors", [])
 
-            html_content = generate_html_string(data)
-            html_path = output_dir / f"{case_name}_report.html"
-            html_path.write_text(html_content, encoding="utf-8")
+            # 恢復：在 output 建立各 case 的專屬資料夾
+            output_case_dir = base_dir / base_output_dir / case_name
+            output_case_dir.mkdir(parents=True, exist_ok=True)
 
-            png_path = output_dir / f"{case_name}_report.png"
-            page.goto(f"file:///{html_path.absolute().as_posix()}")
-            
-            # 修復 2：等待網路與字體載入完畢，避免字體跑版
-            page.wait_for_load_state("networkidle")
-            
-            page.locator("#capture-area").screenshot(path=str(png_path), omit_background=True)
-            
-            print(f"[Renderer] {case_name}: 截圖完成 -> {png_path.name}")
+            # 分割邏輯 (Chunking)
+            if error_count == 0:
+                chunks = [[]]
+            else:
+                chunks = [errors[i:i + MAX_DISPLAY] for i in range(0, len(errors), MAX_DISPLAY)]
+                
+            total_pages = len(chunks)
+
+            for i, chunk in enumerate(chunks):
+                page_num = i + 1
+                html_content = generate_html_string(log_source, error_count, chunk, page_num, total_pages)
+                
+                # 檔案命名加入頁碼
+                html_path = output_case_dir / f"report_{page_num}.html"
+                html_path.write_text(html_content, encoding="utf-8")
+
+                png_path = output_case_dir / f"report_{page_num}.png"
+                page.goto(f"file:///{html_path.absolute().as_posix()}")
+                page.wait_for_load_state("networkidle")
+                page.locator("#capture-area").screenshot(path=str(png_path), omit_background=True)
+                
+                print(f"[Renderer] {case_name}: 第 {page_num}/{total_pages} 頁截圖完成 -> {png_path.name}")
 
         browser.close()
 
